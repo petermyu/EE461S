@@ -13,6 +13,7 @@ int main(int argc, char* argv[]){
 	pid_t pid;
 	char buffer[2000];
 	FILE *fp;
+	char * path;
 	
 	fgets(buffer,2000,stdin);
 //	fprintf(stdout,"%s",&buffer);
@@ -47,8 +48,13 @@ int main(int argc, char* argv[]){
 	}
 	else{
 		// parent
-		if (execl("/bin/ls",str[0], (char *) 0) == -1){
-			printf("could not find %s\n", argv[0]); 
+		char *test;
+		test = getenv("PAGER");
+		path = getenv(str[0]);
+		if(path != NULL){
+			if (execl(path, str[0], (char *) 0) == -1){
+				printf("could not find %s\n", argv[0]); 
+			}
 		}
 	}
 
