@@ -13,11 +13,13 @@ int main(int argc, char* argv[]){
 	pid_t pid;
 	char buffer[2000];
 	FILE *fp;
-	char* input[3];
+	
 	fgets(buffer,2000,stdin);
 //	fprintf(stdout,"%s",&buffer);
 	buffer[strlen(buffer)-1] = '\0';
-	pid = fork();
+	if((pid = fork()) < 0){
+		
+	}
 	int i = 0;
 	int k = 0;
 	int j =0 ;
@@ -38,20 +40,18 @@ int main(int argc, char* argv[]){
 	}
 //	fprintf(stdout,"%s",&str);	
 	
-	input_len = k+1;
 	if(pid == 0){
 		//child
-	
-//		if (execl(strlen(input),input) == -1){
-//			printf("could not find %s\n", argv[0]); 
-//		}
-//		else{}
+
+
 	}
 	else{
 		// parent
-		
-		
-}
-return 0;
+		if (execl("/bin/ls",str[0], (char *) 0) == -1){
+			printf("could not find %s\n", argv[0]); 
+		}
+	}
+
+	return 0;
 }
 
