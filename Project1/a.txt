@@ -1,4 +1,1 @@
-a.txt
-core
-yash
-yash.c
+this is from a.txt!O#K!O!#

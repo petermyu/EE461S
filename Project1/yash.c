@@ -37,7 +37,7 @@ void doRedirect(char** tokens, int* redirects, int num){
 	while(i < num){
 		
 		if(*tokens[redirects[i]] == '<'){
-			if ((file = fopen(tokens[redirects[i]+1], "rw")) == NULL){
+			if ((file = fopen(tokens[redirects[i]+1], "r")) == NULL){
 				fprintf(stderr,"file does not exist %s", tokens[redirects[i]+1]);
 			}
 			else{
@@ -95,18 +95,18 @@ int main(int argc, char* argv[]){
 		}
 	//	fprintf(stdout,"%s",&str);	
 		
-	//	if(pid == 0){
+		if(pid == 0){
 			//child
 			if(args != NULL){
 				if(num_redirects > 0){
 					char *cut[100];
 					int i =0;
 					while(i<redirects[0]){
-						strcpy(cut[i], args[i]);
+						cut[i] = args[i];
 						i++;
 					}
-					strcpy(cut[i],"\0"); 
-
+					//strcat(cut[i],"\0"); 
+					cut[i] = NULL;
 					execvp(*cut, cut);
 				}
 				else{
@@ -118,7 +118,7 @@ int main(int argc, char* argv[]){
 			}
 
 		}
-//	}
+	}
 	return 0;
 }
 
