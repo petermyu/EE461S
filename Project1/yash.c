@@ -35,19 +35,21 @@ void doRedirect(char** tokens, int* redirects, int num){
 	FILE *file;
 
 	while(i < num){
-		if ((file = fopen(tokens[redirects[i]+1], "rw")) == NULL){
-			fprintf(stderr,"can't open %s", tokens[redirects[i]+1]);
-		}
+		
 		if(*tokens[redirects[i]] == '<'){
-		//	file = fopen(tokens[redirects[i]+1], "w");
-			dup2(fileno(file),STDIN_FILENO);
+			if ((file = fopen(tokens[redirects[i]+1], "rw")) == NULL){
+				fprintf(stderr,"file does not exist %s", tokens[redirects[i]+1]);
+			}
+			else{
+				dup2(fileno(file),STDIN_FILENO);
+			}
 		}
 		else if(*tokens[redirects[i]] == '>'){
-		//	file = fopen(tokens[redirects[i]+1], "w");
+			file = fopen(tokens[redirects[i]+1], "w+");
 			dup2(fileno(file),STDOUT_FILENO);
 		}
 		else if(*tokens[redirects[i]] == '2' && *tokens[redirects[i]]+1 == '>'){
-		//	file = fopen(tokens[redirects[i]+1], "rw");
+			file = fopen(tokens[redirects[i]+1], "w+");
 			dup2(fileno(file),STDERR_FILENO);
 		}
 		i++;
@@ -81,11 +83,11 @@ int main(int argc, char* argv[]){
 		if((num_redirects = findRedirect(args,redirects)) > 0){
 			doRedirect(args,redirects,num_redirects);
 		}
-		fprintf(stdout,"testing!!!!!!");
+	//	fprintf(stdout,"testing!!!!!!");
 		//pid = fork(); //test
-		if(hasPipe(buffer) != 1){
-			pid = fork();
-		}
+		// if(hasPipe(buffer) != 1){
+		// 	pid = fork();
+		// }
 
 		else{
 
@@ -93,17 +95,30 @@ int main(int argc, char* argv[]){
 		}
 	//	fprintf(stdout,"%s",&str);	
 		
-		if(pid == 0){
+	//	if(pid == 0){
 			//child
 			if(args != NULL){
-				execvp(*args, args);
+				if(num_redirects > 0){
+					char *cut[100];
+					int i =0;
+					while(i<redirects[0]){
+						strcpy(cut[i], args[i]);
+						i++;
+					}
+					strcpy(cut[i],"\0"); 
+
+					execvp(*cut, cut);
+				}
+				else{
+					execvp(*args,args);
+				}	
 				//printf("could not find %s\n", str[0]); 
 
 				printf("ran command %s\n",args[0]);
 			}
 
 		}
-	}
+//	}
 	return 0;
 }
 
