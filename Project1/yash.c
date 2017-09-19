@@ -55,7 +55,23 @@ void doRedirect(char** tokens, int* redirects, int num){
 		i++;
 	}
 }
-
+void splitPipe(char** args, char** args2){
+	int i = 0;
+	int k = 0;
+	while(args[i] != NULL){
+		if(strcmp(args[i],"|") == 0){
+			args[i] = NULL;
+			i++;
+			break;
+		}
+		i++;
+	}
+	while(args[i] != '\0'){
+		args2[k] = args[i];
+		i++;
+		k++;
+	}
+}
 void parse(char* buffer, char** args){
      while (*buffer != '\0') { 
           while (*buffer == ' ' || *buffer == '\t' || *buffer == '\n'){
@@ -70,55 +86,92 @@ void parse(char* buffer, char** args){
 
 }
 int main(int argc, char* argv[]){
-	while(1){
 		int pipefd[2];
-		pid_t pid;
+		pid_t pid, cpid1, cpid2;
 		char buffer[2000];
 		char *args[100];
+		char *args2[100];
 		int redirects[6];
+		int redirects2[6];
 		int num_redirects;
 		fgets(buffer,2000,stdin);
 		buffer[strlen(buffer)-1] = '\0';
 		parse(buffer, args);
-		if((num_redirects = findRedirect(args,redirects)) > 0){
-			doRedirect(args,redirects,num_redirects);
-		}
+
 	//	fprintf(stdout,"testing!!!!!!");
 		//pid = fork(); //test
-		// if(hasPipe(buffer) != 1){
-		// 	pid = fork();
-		// }
-
-		else{
-
-
-		}
-	//	fprintf(stdout,"%s",&str);	
 		
-		if(pid == 0){
-			//child
-			if(args != NULL){
-				if(num_redirects > 0){
-					char *cut[100];
-					int i =0;
-					while(i<redirects[0]){
-						cut[i] = args[i];
-						i++;
-					}
-					//strcat(cut[i],"\0"); 
-					cut[i] = NULL;
-					execvp(*cut, cut);
-				}
-				else{
-					execvp(*args,args);
-				}	
-				//printf("could not find %s\n", str[0]); 
+		if(hasPipe(buffer) != 1){
+		 	pipe(pipefd);
+		 	splitPipe(args,args2);
+		 }
+		cpid1 = fork();
+	//	fprintf(stdout,"%s",&str);	
+		if(cpid1 > 0){
+			//parent
+			cpid2 = fork();
+			if(cpid2 > 0 ){
+				printf("Child1 pid = %d\n",cpid1);
+				close(pipefd[0]);
+				close(pipefd[1]);
+			}
+			else{
+			//child2
+				sleep(1);
+				printf("Child2 pid = %d\n",cpid2);
+				setpgid(0,cpid1);
+				close(pipefd[1]);
+				dup2(pipefd[0],STDIN_FILENO);
 
-				printf("ran command %s\n",args[0]);
+				if(args2 != NULL){
+					if(num_redirects > 0){
+						char *cut[100];
+						int i =0;
+						if((num_redirects = findRedirect(args2,redirects2)) > 0){
+							doRedirect(args2,redirects2,num_redirects);
+						}
+						while(i<redirects[0]){
+							cut[i] = args2[i];
+							i++;
+						}
+						cut[i] = NULL;
+						execvp(*cut, cut);
+					}
+					else{
+					//	printf("exec %s (child 2)\n",*args2);
+						execvp(*args2,args2);
+					}	
+				}
+			}
+		}
+		else{
+			//child 1
+			setsid();
+			close(pipefd[0]);
+			dup2(pipefd[1], STDOUT_FILENO);
+			if(args != NULL){
+					if(num_redirects > 0){
+						char *cut[100];
+						int i =0;
+						if((num_redirects = findRedirect(args,redirects)) > 0){
+							doRedirect(args,redirects,num_redirects);
+						}
+						while(i<redirects[0]){
+							cut[i] = args[i];
+							i++;
+						}
+						//strcat(cut[i],"\0"); 
+						cut[i] = NULL;
+						execvp(*cut, cut);
+					}
+					else{
+					//	printf("exec %s (child1)\n",*args);
+						execvp(*args,args);
+					}
 			}
 
+
 		}
-	}
 	return 0;
 }
 
