@@ -7,6 +7,62 @@
 #include <sys/wait.h>
 #include <string.h>
 	
+
+typedef struct process
+{
+  struct process *next;
+  char **argv;
+  pid_t pid;
+  char completed;
+  char stopped;
+  int status;
+} process;
+
+
+// void initProcess(process *p, pid_t pgid,
+//                 int infile, int outfile, int errfile,
+//                 int foreground){
+// 	pid_t pid;
+
+// 	if (shell_is_interactive){
+// 	/* Put the process into the process group and give the process group
+// 	 the terminal, if appropriate.
+// 	 This has to be done both by the shell and in the individual
+// 	 child processes because of potential race conditions.  */
+// 	pid = getpid();
+// 	if (pgid == 0) pgid = pid;
+// 		setpgid (pid, pgid);
+// 	if (foreground)
+// 		tcsetpgrp (shell_terminal, pgid);
+
+// 	/* Set the handling for job control signals back to the default.  */
+// 	signal (SIGINT, SIG_DFL);
+// 	signal (SIGQUIT, SIG_DFL);
+// 	signal (SIGTSTP, SIG_DFL);
+// 	signal (SIGTTIN, SIG_DFL);
+// 	signal (SIGTTOU, SIG_DFL);
+// 	signal (SIGCHLD, SIG_DFL);
+// 	/* Set the standard input/output channels of the new process.  */
+// 	if (infile != STDIN_FILENO){
+// 		dup2 (infile, STDIN_FILENO);
+// 		close (infile);
+// 	}
+// 	if (outfile != STDOUT_FILENO){
+// 		dup2 (outfile, STDOUT_FILENO);
+// 		close (outfile);
+// 	}
+// 	if (errfile != STDERR_FILENO){
+// 		dup2 (errfile, STDERR_FILENO);
+// 		close (errfile);
+// 	}
+
+// 	/* Exec the new process.  Make sure we exit.  */
+// 	execvp (p->argv[0], p->argv);
+// 	perror ("execvp");
+// 	exit (1);
+// }
+
+//     }
 int hasPipe(char* string){
 
 	int i;
@@ -85,16 +141,36 @@ void parse(char* buffer, char** args){
      *args = NULL;
 
 }
+void handleExec(char **args, int *redirects){
+	int num_redirects;
+	if(args != NULL){
+		char *cut[100];
+		int i =0;
+		if((num_redirects = findRedirect(args,redirects)) > 0){
+			doRedirect(args,redirects,num_redirects);
+			while(i<redirects[0]){
+				cut[i] = args[i];
+				i++;
+			}
+			cut[i] = NULL;
+			execvp(*cut, cut);
+		}
+		else{
+		//	printf("exec %s (child 2)\n",*args2);
+			execvp(*args,args);
+		}	
+	}
+}
 int main(int argc, char* argv[]){
 		int pipefd[2];
 		pid_t pid, cpid1, cpid2;
-		char buffer[2000];
-		char *args[100];
-		char *args2[100];
+		char buffer[2001];
+		char *args[1000];
+		char *args2[1000];
 		int redirects[6];
 		int redirects2[6];
 		int num_redirects;
-		fgets(buffer,2000,stdin);
+		fgets(buffer,2001,stdin);
 		buffer[strlen(buffer)-1] = '\0';
 
  		pipe(pipefd);
@@ -102,6 +178,7 @@ int main(int argc, char* argv[]){
 		//pid = fork(); //test
 		//printf("initial cpid1 %d\n",cpid1);
 
+ 		//ONLY ONE COMMAND, NO PIPE
 		if(hasPipe(buffer) == 0){
 			parse(buffer, args);
 			printf("no pipe");
@@ -126,12 +203,11 @@ int main(int argc, char* argv[]){
 						}
 				}
 		}
+		//PIPE EXISTS, SO HANDLE
 		else{
 			parse(buffer, args);
 			splitPipe(args,args2);
 			cpid1 = fork();
-			
-		//	fprintf(stdout,"%s",&str);	
 			if(cpid1 > 0){
 				//parent
 				printf("Child1 pid = %d\n",cpid1);
@@ -150,26 +226,26 @@ int main(int argc, char* argv[]){
 					setpgid(0,cpid1);
 					close(pipefd[1]);
 					dup2(pipefd[0],STDIN_FILENO);
-
-					if(args2 != NULL){
-						if(num_redirects > 0){
-							char *cut[100];
-							int i =0;
-							if((num_redirects = findRedirect(args2,redirects2)) > 0){
-								doRedirect(args2,redirects2,num_redirects);
-							}
-							while(i<redirects[0]){
-								cut[i] = args2[i];
-								i++;
-							}
-							cut[i] = NULL;
-							execvp(*cut, cut);
-						}
-						else{
-						//	printf("exec %s (child 2)\n",*args2);
-							execvp(*args2,args2);
-						}	
-					}
+					handleExec(args2,redirects2);
+					// if(args2 != NULL){
+					// 	if(num_redirects > 0){
+					// 		char *cut[100];
+					// 		int i =0;
+					// 		if((num_redirects = findRedirect(args2,redirects2)) > 0){
+					// 			doRedirect(args2,redirects2,num_redirects);
+					// 		}
+					// 		while(i<redirects[0]){
+					// 			cut[i] = args2[i];
+					// 			i++;
+					// 		}
+					// 		cut[i] = NULL;
+					// 		execvp(*cut, cut);
+					// 	}
+					// 	else{
+					// 	//	printf("exec %s (child 2)\n",*args2);
+					// 		execvp(*args2,args2);
+					// 	}	
+					// }
 				}
 			}
 			else{
@@ -177,30 +253,29 @@ int main(int argc, char* argv[]){
 				setsid();
 				close(pipefd[0]);
 				dup2(pipefd[1], STDOUT_FILENO);
-				if(args != NULL){
-						if(num_redirects > 0){
-							char *cut[100];
-							int i =0;
-							if((num_redirects = findRedirect(args,redirects)) > 0){
-								doRedirect(args,redirects,num_redirects);
-							}
-							while(i<redirects[0]){
-								cut[i] = args[i];
-								i++;
-							}
-							//strcat(cut[i],"\0"); 
-							cut[i] = NULL;
-							execvp(*cut, cut);
-						}
-						else{
-						//	printf("exec %s (child1)\n",*args);
-							execvp(*args,args);
-						}
-				}
-
-
+				handleExec(args,redirects);
+				// if(args != NULL){
+				// 	if(num_redirects > 0){
+				// 		char *cut[100];
+				// 		int i =0;
+				// 		if((num_redirects = findRedirect(args,redirects)) > 0){
+				// 			doRedirect(args,redirects,num_redirects);
+				// 		}
+				// 		while(i<redirects[0]){
+				// 			cut[i] = args[i];
+				// 			i++;
+				// 		}
+				// 		//strcat(cut[i],"\0"); 
+				// 		cut[i] = NULL;
+				// 		execvp(*cut, cut);
+				// 	}
+				// 	else{
+				// 	//	printf("exec %s (child1)\n",*args);
+				// 		execvp(*args,args);
+				// 	}
+				// }
+			}
 		}
-	}
 	return 0;
 }
 
