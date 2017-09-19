@@ -9,16 +9,17 @@
 #include <termios.h>
 	
 
-typedef struct process
-{
-  struct process *next;
-  char **argv;
-  pid_t pid;
-  char completed;
-  char stopped;
-  int status;
-} process;
+typedef struct job {
 
+	struct *job next;
+	pid_t jpid;
+	char *argv;
+	int fg;//0 false, 1 true
+	int status;
+} job;
+
+job *first = NULL:
+job *last = NULL;
 int pipefd[2];
 pid_t pid, cpid1, cpid2;
 int status;
@@ -29,89 +30,14 @@ int shell_terminal;
 int shell_is_interactive;
 
 static void sig_int(int signo) {
-  printf("Sending signals to group:%d\n",cpid1); // group id is pid of first in pipeline
+  printf("Sending signals to group:%d\n",cpid1); 
   kill(-cpid1,SIGINT);
 }
 static void sig_tstp(int signo) {
-  printf("Sending SIGTSTP to group:%d\n",cpid1); // group id is pid of first in pipeline
+  printf("Sending SIGTSTP to group:%d\n",cpid1);
   kill(-cpid1,SIGTSTP);
 }
-void initShell(){
 
-  /* See if we are running interactively.  */
-  shell_terminal = STDIN_FILENO;
-  shell_is_interactive = isatty (shell_terminal);
-
-  if (shell_is_interactive)
-    {
-      /* Loop until we are in the foreground.  */
-      while (tcgetpgrp (shell_terminal) != (shell_pgid = getpgrp ()))
-        kill (- shell_pgid, SIGTTIN);
-
-      /* Ignore interactive and job-control signals.  */
-      signal (SIGINT, SIG_IGN);
-      signal (SIGQUIT, SIG_IGN);
-      signal (SIGTSTP, SIG_IGN);
-      signal (SIGTTIN, SIG_IGN);
-      signal (SIGTTOU, SIG_IGN);
-      signal (SIGCHLD, SIG_IGN);
-
-      /* Put ourselves in our own process group.  */
-      shell_pgid = getpid ();
-      if (setpgid (shell_pgid, shell_pgid) < 0)
-        {
-          perror ("Couldn't put the shell in its own process group");
-          exit (1);
-        }
-
-      /* Grab control of the terminal.  */
-      tcsetpgrp (shell_terminal, shell_pgid);
-
-      /* Save default terminal attributes for shell.  */
-      tcgetattr (shell_terminal, &shell_tmodes);
-    }
-}
-void initProcess(process *p, pid_t pgid, int infile, int outfile, int errfile, int foreground){
-	pid_t pid;
-
-	if (shell_is_interactive){
-	/* Put the process into the process group and give the process group
-	 the terminal, if appropriate.
-	 This has to be done both by the shell and in the individual
-	 child processes because of potential race conditions.  */
-	pid = getpid();
-	if (pgid == 0) pgid = pid;
-		setpgid (pid, pgid);
-	if (foreground)
-		tcsetpgrp (shell_terminal, pgid);
-
-	/* Set the handling for job control signals back to the default.  */
-	signal (SIGINT, SIG_DFL);
-	signal (SIGQUIT, SIG_DFL);
-	signal (SIGTSTP, SIG_DFL);
-	signal (SIGTTIN, SIG_DFL);
-	signal (SIGTTOU, SIG_DFL);
-	signal (SIGCHLD, SIG_DFL);
-	/* Set the standard input/output channels of the new process.  */
-	if (infile != STDIN_FILENO){
-		dup2 (infile, STDIN_FILENO);
-		close (infile);
-	}
-	if (outfile != STDOUT_FILENO){
-		dup2 (outfile, STDOUT_FILENO);
-		close (outfile);
-	}
-	if (errfile != STDERR_FILENO){
-		dup2 (errfile, STDERR_FILENO);
-		close (errfile);
-	}
-
-	/* Exec the new process.  Make sure we exit.  */
-	execvp (p->argv[0], p->argv);
-	perror ("execvp");
-	exit (1);
-	}
-}
 int hasPipe(char* string){
 
 	int i;
@@ -211,6 +137,18 @@ void handleExec(char **args, int *redirects){
 		exit(1);
 	}
 }
+void handleJob(job newJob, char *argv, int fg, int status, pid_t pid){
+	if(*first == NULL){
+		*first == *newJob;
+	}
+	else{
+		//something
+	}
+	newJob->argv = argv;
+	newJob->fg = fg;
+	newJob->jpid = pid;
+
+}
 void handleSignal(int n){
 
 	int count=0;
@@ -238,23 +176,25 @@ void handleSignal(int n){
       }
 }
 int main(int argc, char* argv[]){
-	while(1){
+
 		initShell();
 
 		char buffer[2001];
+
+		printf("# ");
+		while(fgets(buffer,2001,stdin) != NULL){
+		job newJob;
 		char *args[1000];
 		char *args2[1000];
 		int redirects[6];
 		int redirects2[6];
 		int num_redirects;
-		printf("# ");
-		if(fgets(buffer,2001,stdin) == NULL){
-			printf("\n");
-			exit(1);
-		}
+		// if(fgets(buffer,2001,stdin) == NULL){
+		// 	printf("\n");
+		// 	exit(1);
+		// }
 
 		buffer[strlen(buffer)-1] = '\0';
-
 		pipe(pipefd);
 	//	fprintf(stdout,"testing!!!!!!");
 		//pid = fork(); //test
@@ -262,7 +202,6 @@ int main(int argc, char* argv[]){
 
 			//ONLY ONE COMMAND, NO PIPE
 		if(hasPipe(buffer) == 0){
-
 			cpid1 = fork();
 			if(cpid1 == 0){
 				//child
@@ -271,6 +210,7 @@ int main(int argc, char* argv[]){
 			}
 			else{
 				//parent
+				handleJob(newJob,args,1,0,cpid1);
 				handleSignal(1);
 			}
 
@@ -283,11 +223,11 @@ int main(int argc, char* argv[]){
 			if(cpid1 > 0){
 				//parent
 				cpid2 = fork();
-
 				if(cpid2 > 0){
 					close(pipefd[0]);
 					close(pipefd[1]);
 					handleSignal(2);
+					handleJob(newJob,args,1,0,cpid1);
 				}
 				else{
 				//child2
@@ -308,6 +248,7 @@ int main(int argc, char* argv[]){
 				handleExec(args,redirects);
 			}
 		}
+		printf("# ");
 	}
 	return 0;
 }
