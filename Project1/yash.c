@@ -9,34 +9,57 @@
 #include <termios.h>
 	
 
-typedef struct job {
+typedef struct{
 
-	struct *job next;
-	pid_t jpid;
-	char *argv;
+	struct job *next;
+	struct job *prev;
+	pid_t jobpid;
+	char **argv;
 	int fg;//0 false, 1 true
 	int status;
 } job;
 
-job *first = NULL:
+int numJobs = 0;
+job *first = NULL;
 job *last = NULL;
+
 int pipefd[2];
 pid_t pid, cpid1, cpid2;
 int status;
 
-pid_t shell_pgid;
-struct termios shell_tmodes;
-int shell_terminal;
-int shell_is_interactive;
-
 static void sig_int(int signo) {
-  printf("Sending signals to group:%d\n",cpid1); 
-  kill(-cpid1,SIGINT);
+	if(cpid1 != 0){
+	  printf("Sending signals to group:%d\n",cpid1); 
+	  kill(-cpid1,SIGINT);
+	}
 }
 static void sig_tstp(int signo) {
-  printf("Sending SIGTSTP to group:%d\n",cpid1);
-  kill(-cpid1,SIGTSTP);
+	if(cpid1 != 0){
+	  printf("Sending SIGTSTP to group:%d\n",cpid1);
+	  kill(-cpid1,SIGTSTP);
+	}
 }
+static void sig_child(int signo){
+ 	pid_t wpid;
+ 	printf("waiting for child change");
+ 	while(1){
+      	// Parent's wait processing is based on the sig_ex4.c
+      	pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
+      	if (pid == -1) {
+      		perror("waitpid");
+      	}
+      	if(WIFEXITED(status)) {
+      	 	 printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
+      	} else if (WIFSIGNALED(status)) {
+      	  	printf("child %d killed by signal %d\n", pid, WTERMSIG(status));
+      	} else if (WIFSTOPPED(status)) {
+      	 	 printf("%d stopped by signal %d\n", pid,WSTOPSIG(status));
+      	} else if (WIFCONTINUED(status)) {
+      		  printf("Continuing %d\n",pid);
+    	}
+   	}
+}
+// }
 
 int hasPipe(char* string){
 
@@ -103,7 +126,21 @@ void splitPipe(char** args, char** args2){
 		k++;
 	}
 }
-void parse(char* buffer, char** args){
+int parse(char* buffer, char** args){
+	int x = 0;
+	int background;
+	if(buffer == NULL){
+		return;
+	}
+	while(buffer[x] != '\0')
+		x++;
+	if(buffer[x-1] == '&'){
+		background = 1;
+		buffer[x-1] = '\0'; // cut off &
+	}
+	else{
+		background = 0;
+	}
      while (*buffer != '\0') { 
           while (*buffer == ' ' || *buffer == '\t' || *buffer == '\n'){
                *buffer++ = '\0';
@@ -114,6 +151,7 @@ void parse(char* buffer, char** args){
            }
      }
      *args = NULL;
+     return background;
 
 }
 void handleExec(char **args, int *redirects){
@@ -137,80 +175,110 @@ void handleExec(char **args, int *redirects){
 		exit(1);
 	}
 }
-void handleJob(job newJob, char *argv, int fg, int status, pid_t pid){
-	if(*first == NULL){
-		*first == *newJob;
+void handleJob(char **argv, int fg, int status, pid_t pid){
+	job newJob;
+	job temp;
+	numJobs++;
+	int i= 0;
+	if(first == NULL){
+		first = &newJob;
+		last = &newJob;
 	}
 	else{
-		//something
+		last->next = &newJob;
+		newJob.prev = last;
+		last = &newJob;
 	}
-	newJob->argv = argv;
-	newJob->fg = fg;
-	newJob->jpid = pid;
+
+	newJob.argv = argv;
+	newJob.fg = fg;
+	newJob.jobpid = pid;
 
 }
-void handleSignal(int n){
+int isJobs(char buffer[],char ** args){
+	job *temp;
+	char ground;
+	char *state;
+	temp = first;
+	if(args[0] == NULL){
+		return;
+	}
+	if(strcmp(args[0],"jobs") == 0){
+		int x = 0;
+		while(x<numJobs){
+			
+			if(temp->fg == 1){
+				ground = '+';
+			}
+			else{
+				ground ='-';
+			}
 
-	int count=0;
+			if(temp->status == 1){
+				state = "Running";
+			}
+			else{
+				state = "Stopped";
+			}
+			printf("[%d] %c %s %s",x,ground,buffer);
+			temp = temp->next;
+		}
+		return 1;
+	}
+	else{
+		return 0;
+	}
+}
+void initSignalHandler(){
+
 	if (signal(SIGINT, sig_int) == SIG_ERR)
 		printf("signal(SIGINT) error");
 	if (signal(SIGTSTP, sig_tstp) == SIG_ERR)
 		printf("signal(SIGTSTP) error");
+	 if(signal(SIGCHLD, sig_child) == SIG_ERR)
+	 	printf("signal(SIGCHILD) error");
 
-	while (count < n) {
-      	// Parent's wait processing is based on the sig_ex4.c
-      	pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
-      	if (pid == -1) {
-      	  perror("waitpid");
-      	}
-      	
-      	if (WIFEXITED(status)) {
-      	  printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));count++;
-      	} else if (WIFSIGNALED(status)) {
-      	  printf("child %d killed by signal %d\n", pid, WTERMSIG(status));count++;
-      	} else if (WIFSTOPPED(status)) {
-      	  printf("%d stopped by signal %d\n", pid,WSTOPSIG(status));
-      	} else if (WIFCONTINUED(status)) {
-      	  printf("Continuing %d\n",pid);
-      	}
-      }
+}
+void handleSignal(int n){
+
+}
+void handleSIGCHILD(){
+
 }
 int main(int argc, char* argv[]){
 
-		initShell();
-
+		//initShell();
+		initSignalHandler();
 		char buffer[2001];
 
 		printf("# ");
 		while(fgets(buffer,2001,stdin) != NULL){
-		job newJob;
+
 		char *args[1000];
 		char *args2[1000];
 		int redirects[6];
 		int redirects2[6];
 		int num_redirects;
-		// if(fgets(buffer,2001,stdin) == NULL){
-		// 	printf("\n");
-		// 	exit(1);
-		// }
-
+		int background;
 		buffer[strlen(buffer)-1] = '\0';
 		pipe(pipefd);
-	//	fprintf(stdout,"testing!!!!!!");
-		//pid = fork(); //test
-		//printf("initial cpid1 %d\n",cpid1);
 
-			//ONLY ONE COMMAND, NO PIPE
+		background = parse(buffer, args);
+		if(isJobs(buffer,args) == 1){// checks if jobs
+		
+		}
+		else{
+		//ONLY ONE COMMAND, NO PIPE
 		if(hasPipe(buffer) == 0){
+			
 			cpid1 = fork();
 			if(cpid1 == 0){
 				//child
-				parse(buffer, args);
 				handleExec(args,redirects);
 			}
 			else{
 				//parent
-				handleJob(newJob,args,1,0,cpid1);
+				handleJob(args,background,0,cpid1);
 				handleSignal(1);
 			}
 
@@ -227,7 +295,7 @@ int main(int argc, char* argv[]){
 					close(pipefd[0]);
 					close(pipefd[1]);
 					handleSignal(2);
-					handleJob(newJob,args,1,0,cpid1);
+					handleJob(args,background,0,cpid1);
 				}
 				else{
 				//child2
@@ -237,7 +305,6 @@ int main(int argc, char* argv[]){
 					close(pipefd[1]);
 					dup2(pipefd[0],STDIN_FILENO);
 					handleExec(args2,redirects2);
-
 				}
 			}
 			else{
@@ -249,6 +316,7 @@ int main(int argc, char* argv[]){
 			}
 		}
 		printf("# ");
+	}
 	}
 	return 0;
 }
