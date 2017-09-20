@@ -19,6 +19,7 @@ typedef struct{
 	int status;
 } job;
 
+int childflag;
 int numJobs = 0;
 job *first = NULL;
 job *last = NULL;
@@ -41,10 +42,11 @@ static void sig_tstp(int signo) {
 }
 static void sig_child(int signo){
  	pid_t wpid;
- 	printf("waiting for child change");
- 	while(1){
+ 	//printf("waiting for child change");
+
       	// Parent's wait processing is based on the sig_ex4.c
       	pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
+
       	if (pid == -1) {
       		perror("waitpid");
       	}
@@ -58,14 +60,12 @@ static void sig_child(int signo){
       		  printf("Continuing %d\n",pid);
     	}
    	}
-}
-// }
 
-int hasPipe(char* string){
+int hasPipe(char** string){
 
 	int i;
 	for(i = 0;string[i] != '\0';i++){
-		if(string[i] == '|'){
+		if(strcmp(string[i], "|") == 0){
 			return 1;
 		}
 	}
@@ -135,8 +135,7 @@ int parse(char* buffer, char** args){
 	while(buffer[x] != '\0')
 		x++;
 	if(buffer[x-1] == '&'){
-		background = 1;
-		buffer[x-1] = '\0'; // cut off &
+		background = 1; // cut off &
 	}
 	else{
 		background = 0;
@@ -156,6 +155,12 @@ int parse(char* buffer, char** args){
 }
 void handleExec(char **args, int *redirects){
 	int num_redirects;
+	int z = 0;
+	while(args[z] != NULL)
+		z++;
+	if(strcmp(args[z-1],"&") == 0){
+		args[z-1] = NULL;
+	}
 	if(args != NULL){
 		char *cut[100];
 		int i =0;
@@ -269,7 +274,7 @@ int main(int argc, char* argv[]){
 		}
 		else{
 		//ONLY ONE COMMAND, NO PIPE
-		if(hasPipe(buffer) == 0){
+		if(hasPipe(args) == 0){
 			
 			cpid1 = fork();
 			if(cpid1 == 0){
@@ -285,7 +290,6 @@ int main(int argc, char* argv[]){
 		}
 		//PIPE EXISTS, SO HANDLE
 		else{
-			parse(buffer, args);
 			splitPipe(args,args2);
 			cpid1 = fork();
 			if(cpid1 > 0){
