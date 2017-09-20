@@ -31,13 +31,13 @@ int status;
 
 static void sig_int(int signo) {
 	if(cpid1 != 0){
-	  printf("Sending signals to group:%d\n",cpid1); 
+	//  printf("Sending signals to group:%d\n",cpid1); 
 	  kill(-cpid1,SIGINT);
 	}
 }
 static void sig_tstp(int signo) {
 	if(cpid1 != 0){
-	  printf("Sending SIGTSTP to group:%d\n",cpid1);
+	//  printf("Sending SIGTSTP to group:%d\n",cpid1);
 	  kill(-cpid1,SIGTSTP);
 	}
 }
@@ -49,19 +49,19 @@ static void sig_child(int signo){
 	// Parent's wait processing is based on the sig_ex4.c
 	pid = waitpid(-1, &status, WUNTRACED | WCONTINUED | WNOHANG);
 	if (pid == -1) {
-		perror("waitpid");
+	//	perror("waitpid");
 	}
 	if(WIFEXITED(status)) {
 //		findJobByPID(pid, 2);
-	 	printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
+	 //	printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
 
 
 	} else if (WIFSIGNALED(status)) {
-	  	printf("child %dp killed by signal %d\n", pid, WTERMSIG(status));
+	  //	printf("child %dp killed by signal %d\n", pid, WTERMSIG(status));
 	} else if (WIFSTOPPED(status)) {
-	 	 printf("%d stopped by signal %d\n", pid,WSTOPSIG(status));
+	 	// printf("%d stopped by signal %d\n", pid,WSTOPSIG(status));
 	} else if (WIFCONTINUED(status)) {
-		  printf("Continuing %d\n",pid);
+//		  printf("Continuing %d\n",pid);
 	}
 
 
@@ -94,7 +94,7 @@ void findJobByPID(pid_t find, int newStatus){
 	while(temp->next != NULL){
 		if(temp->jobpid == find){
 			temp->status = newStatus;
-			printf("new status %d", temp->status);
+	//		printf("new status %d", temp->status);
 		}
 		temp = temp->next;
 	}
@@ -315,6 +315,7 @@ int main(int argc, char* argv[]){
 				//parent
 				handleJob(initialbuff,background,0,cpid1);
 				handleSignal(1);
+				
 			}
 
 		}
@@ -349,6 +350,7 @@ int main(int argc, char* argv[]){
 				handleExec(args,redirects);
 			}
 		}
+		sleep(1);
 		printf("# ");
 	}
 	}
