@@ -14,15 +14,16 @@ typedef struct{
 	struct job *next;
 	struct job *prev;
 	pid_t jobpid;
-	char **argv;
+	int jobNum;
+	char *argv;
 	int fg;//0 false, 1 true
 	int status;
 } job;
 
 int childflag;
 int numJobs = 0;
-job *first = NULL;
-job *last = NULL;
+job *first;
+job *last;
 
 int pipefd[2];
 pid_t pid, cpid1, cpid2;
@@ -41,25 +42,30 @@ static void sig_tstp(int signo) {
 	}
 }
 static void sig_child(int signo){
- 	pid_t wpid;
- 	//printf("waiting for child change");
+	pid_t wpid;
 
-      	// Parent's wait processing is based on the sig_ex4.c
-      	pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
+	//printf("waiting for child change");
 
-      	if (pid == -1) {
-      		perror("waitpid");
-      	}
-      	if(WIFEXITED(status)) {
-      	 	 printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
-      	} else if (WIFSIGNALED(status)) {
-      	  	printf("child %d killed by signal %d\n", pid, WTERMSIG(status));
-      	} else if (WIFSTOPPED(status)) {
-      	 	 printf("%d stopped by signal %d\n", pid,WSTOPSIG(status));
-      	} else if (WIFCONTINUED(status)) {
-      		  printf("Continuing %d\n",pid);
-    	}
-   	}
+	// Parent's wait processing is based on the sig_ex4.c
+	pid = waitpid(-1, &status, WUNTRACED | WCONTINUED | WNOHANG);
+	if (pid == -1) {
+		perror("waitpid");
+	}
+	if(WIFEXITED(status)) {
+//		findJobByPID(pid, 2);
+	 	printf("child %d exited, status=%d\n", pid, WEXITSTATUS(status));
+
+
+	} else if (WIFSIGNALED(status)) {
+	  	printf("child %dp killed by signal %d\n", pid, WTERMSIG(status));
+	} else if (WIFSTOPPED(status)) {
+	 	 printf("%d stopped by signal %d\n", pid,WSTOPSIG(status));
+	} else if (WIFCONTINUED(status)) {
+		  printf("Continuing %d\n",pid);
+	}
+
+
+}
 
 int hasPipe(char** string){
 
@@ -82,6 +88,16 @@ int findRedirect(char** tokens, int* redirects){
 		}
 	}
 	return num;
+}
+void findJobByPID(pid_t find, int newStatus){
+	job* temp = first;
+	while(temp->next != NULL){
+		if(temp->jobpid == find){
+			temp->status = newStatus;
+			printf("new status %d", temp->status);
+		}
+		temp = temp->next;
+	}
 }
 void doRedirect(char** tokens, int* redirects, int num){
 
@@ -135,7 +151,7 @@ int parse(char* buffer, char** args){
 	while(buffer[x] != '\0')
 		x++;
 	if(buffer[x-1] == '&'){
-		background = 1; // cut off &
+		background = 1;
 	}
 	else{
 		background = 0;
@@ -180,28 +196,38 @@ void handleExec(char **args, int *redirects){
 		exit(1);
 	}
 }
-void handleJob(char **argv, int fg, int status, pid_t pid){
-	job newJob;
-	job temp;
+void handleJob(char *argv, int fg, int status, pid_t pid){
+	job *newJob;
+	newJob = (job *) malloc(sizeof(job));
+	job *temp;
 	numJobs++;
+	char *newargs = (char*) malloc(sizeof(char)*sizeof(argv));
+	strcpy(newargs,argv);
 	int i= 0;
 	if(first == NULL){
-		first = &newJob;
-		last = &newJob;
+		first = (job *) malloc(sizeof(job));
+		last = first;
+		first->next = NULL;
+		first->argv = newargs;
+		first->fg = fg;
+		first->jobpid = pid;
+		first->jobNum = numJobs;
 	}
 	else{
-		last->next = &newJob;
-		newJob.prev = last;
-		last = &newJob;
+		newJob->argv = newargs;
+		temp = last;
+		last->next = newJob;
+		last = newJob;
+		last->prev = temp;
+		last->jobNum = numJobs;
+
 	}
 
-	newJob.argv = argv;
-	newJob.fg = fg;
-	newJob.jobpid = pid;
 
 }
 int isJobs(char buffer[],char ** args){
 	job *temp;
+	temp = (job *) malloc(sizeof(job));
 	char ground;
 	char *state;
 	temp = first;
@@ -211,7 +237,6 @@ int isJobs(char buffer[],char ** args){
 	if(strcmp(args[0],"jobs") == 0){
 		int x = 0;
 		while(x<numJobs){
-			
 			if(temp->fg == 1){
 				ground = '+';
 			}
@@ -222,11 +247,16 @@ int isJobs(char buffer[],char ** args){
 			if(temp->status == 1){
 				state = "Running";
 			}
-			else{
+			else if (temp->status == 0){
 				state = "Stopped";
 			}
-			printf("[%d] %c %s %s",x,ground,buffer);
+			else if (temp->status == 2){
+				state = "Done";
+			}
+			//check if states have changed
+			printf("[%d] %c %s\t%s \n",temp->jobNum,ground,state,temp->argv);
 			temp = temp->next;
+			x++;
 		}
 		return 1;
 	}
@@ -255,7 +285,7 @@ int main(int argc, char* argv[]){
 		//initShell();
 		initSignalHandler();
 		char buffer[2001];
-
+		char initialbuff[2001];
 		printf("# ");
 		while(fgets(buffer,2001,stdin) != NULL){
 
@@ -267,7 +297,7 @@ int main(int argc, char* argv[]){
 		int background;
 		buffer[strlen(buffer)-1] = '\0';
 		pipe(pipefd);
-
+		strcpy(initialbuff,buffer);
 		background = parse(buffer, args);
 		if(isJobs(buffer,args) == 1){// checks if jobs
 		
@@ -283,7 +313,7 @@ int main(int argc, char* argv[]){
 			}
 			else{
 				//parent
-				handleJob(args,background,0,cpid1);
+				handleJob(initialbuff,background,0,cpid1);
 				handleSignal(1);
 			}
 
@@ -299,7 +329,7 @@ int main(int argc, char* argv[]){
 					close(pipefd[0]);
 					close(pipefd[1]);
 					handleSignal(2);
-					handleJob(args,background,0,cpid1);
+					handleJob(initialbuff,background,0,cpid1);
 				}
 				else{
 				//child2
